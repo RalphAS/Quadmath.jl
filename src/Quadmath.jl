@@ -1,7 +1,7 @@
 module Quadmath
 using Requires
 
-export Float128, ComplexF128
+export Float128, ComplexF128, Inf128
 
 import Base: (*), +, -, /,  <, <=, ==, ^, convert,
           reinterpret, sign_mask, exponent_mask, exponent_one, exponent_half,
@@ -13,7 +13,7 @@ import Base: (*), +, -, /,  <, <=, ==, ^, convert,
           tan, tanh,
           ceil, floor, trunc, round, fma,
           copysign, flipsign, max, min, hypot, abs,
-          ldexp, frexp, modf, nextfloat, eps,
+          ldexp, frexp, modf, nextfloat, uabs, typemax, typemin, eps,
           isinf, isnan, isfinite, isinteger,
           floatmin, floatmax, precision, signbit,
           Int32, Int64, Float64, BigFloat, BigInt
@@ -245,6 +245,8 @@ else
 end
 
 Float128(x::Rational{T}) where T = Float128(numerator(x))/Float128(denominator(x))
+
+Float128(x::Bool) = x ? Float128(1) : Float128(0)
 
 # comparison
 
@@ -488,6 +490,15 @@ precision(::Type{Float128}) = 113
 eps(::Type{Float128}) = reinterpret(Float128, 0x3f8f_0000_0000_0000_0000_0000_0000_0000)
 floatmin(::Type{Float128}) = reinterpret(Float128, 0x0001_0000_0000_0000_0000_0000_0000_0000)
 floatmax(::Type{Float128}) = reinterpret(Float128, 0x7ffe_ffff_ffff_ffff_ffff_ffff_ffff_ffff)
+
+"""
+    Inf128
+
+Positive infinity of type [`Float128`](@ref).
+"""
+const Inf128 = reinterpret(Float128, 0x7fff_0000_0000_0000_0000_0000_0000_0000)
+typemax(::Type{Float128}) = Inf128
+typemin(::Type{Float128}) = -Inf128
 
 if _WIN_PTR_ABI
     function ldexp(x::Float128, n::Cint)
