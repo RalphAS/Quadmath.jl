@@ -18,6 +18,8 @@ import Base: (*), +, -, /,  <, <=, ==, ^, convert,
           floatmin, floatmax, precision, signbit,
           Int32, Int64, Float64, BigFloat, BigInt
 
+using Base: llvmcall
+
 if Sys.isapple()
     const quadoplib = "libquadmath.0"
     const libquadmath = "libquadmath.0"
@@ -29,7 +31,7 @@ elseif Sys.iswindows()
     const libquadmath = "libquadmath-0.dll"
 end
 
-@static if Sys.isunix()
+# @static if Sys.isunix()
     # we use this slightly cumbersome definition to ensure that the value is passed
     # on the xmm registers, matching the x86_64 ABI for __float128.
     const Cfloat128 = NTuple{2,VecElement{Float64}}
@@ -63,11 +65,11 @@ end
     reinterpret(::Type{Float128}, x::Int128) =
         reinterpret(Float128, reinterpret(UInt128, x))
 
-elseif Sys.iswindows()
-    primitive type Float128 <: AbstractFloat 128
-    end
-    const Cfloat128 = Float128
-end
+# elseif Sys.iswindows()
+#    primitive type Float128 <: AbstractFloat 128
+#    end
+#    const Cfloat128 = Float128
+# end
 
 function __init__()
     @require SpecialFunctions="276daf66-3868-5448-9aa4-cd146d93841b" begin
@@ -101,10 +103,24 @@ fpinttype(::Type{Float128}) = UInt128
 Float128(x::Float128) = x
 
 ## Float64
-Float128(x::Float64) =
-    Float128(ccall((:__extenddftf2, quadoplib), Cfloat128, (Cdouble,), x))
-Float64(x::Float128) =
-    ccall((:__trunctfdf2, quadoplib), Cdouble, (Cfloat128,), x)
+function Float128(x::Float64)
+    r = llvmcall("""
+            %v = fpext double %0 to fp128
+            %vv = bitcast fp128 %v to <2 x double>
+            ret <2 x double> %vv""", Cfloat128, Tuple{Cdouble}, x)
+    Float128(r)
+end
+function Float64(x::Float128)
+    llvmcall("""
+          %2 = bitcast <2 x double> %0 to fp128
+          %3 = fptrunc fp128 %2 to double
+          ret double %3""", Cdouble, Tuple{Cfloat128}, x.data)
+end
+
+# Float128(x::Float64) =
+#     Float128(ccall((:__extenddftf2, quadoplib), Cfloat128, (Cdouble,), x))
+# Float64(x::Float128) =
+#     ccall((:__trunctfdf2, quadoplib), Cdouble, (Cfloat128,), x)
 
 Int32(x::Float128) =
     ccall((:__fixtfsi, quadoplib), Int32, (Cfloat128,), x)
