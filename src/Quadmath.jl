@@ -158,9 +158,11 @@ Float128(x::Float128) = x
 
 @noinline function Float128(x::Float64)
     r = llvmcall("""
-            %v = fpext double %0 to fp128
+            %f = inttoptr i64 %1 to fp128 (double)*
+            %v = call x86_vectorcallcc fp128 %f(double %0)
             %vv = bitcast fp128 %v to <2 x double>
-            ret <2 x double> %vv""", Cfloat128, Tuple{Cdouble}, x)
+            ret <2 x double> %vv""", Cfloat128, Tuple{Cdouble,Ptr{Cvoid}},
+                 x, cglobal((:__extenddftf2,quadoplib)))
     Float128(r)
 end
 
@@ -172,10 +174,12 @@ end
 #     0x55ea041f5948: v2f64 = Register %2
 
 @noinline function Float64(x::Float128)
-    llvmcall("""
-          %2 = bitcast <2 x double> %0 to fp128
-          %3 = fptrunc fp128 %2 to double
-          ret double %3""", Cdouble, Tuple{Cfloat128}, x.data)
+    llvmcall("""%u = bitcast <2 x double> %0 to fp128
+                %f = inttoptr i64 %1 to double (fp128)*
+                %v = call x86_vectorcallcc double %f(fp128 %u)
+                ret double %v""",
+             Cdouble, Tuple{Cfloat128,Ptr{Cvoid}},
+             x.data, cglobal((:__trunctfdf2,quadoplib)))
 end
 
 ## Float32
