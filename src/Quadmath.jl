@@ -312,37 +312,35 @@ end
 (<=)(x::Float128, y::Float128) =
     ccall((:__letf2,quadoplib), Cint, (Cfloat128,Cfloat128), x, y) <= 0
 =#
+macro _symsym(x)
+    return Expr(:quote, x)
+end
 
 # arithmetic
-
-for (op, lOp) in ((:+, :fadd), (:-, :fsub), (:*, :fmul), (:/, :fdiv))
+for (op, func) in ((:+, :__addtf3), (:-, :__subtf3), (:*, :__multf3), (:/, :__divtf3))
     @eval begin
         @noinline function ($op)(x::Float128, y::Float128)
-            r = llvmcall(
-                @_irstring1("lOp",$lOp,
-                            "%u = bitcast <2 x double> %0 to fp128",
-                            "%v = bitcast <2 x double> %1 to fp128",
-                            "%w = lOp fp128 %u, %v",
-                            "%vv = bitcast fp128 %w to <2 x double>",
-                            "ret <2 x double> %vv"),
-                Cfloat128, Tuple{Cfloat128,Cfloat128}, x.data, y.data)
-            # experiment to test hypothesis
-            if Sys.iswindows()
-                r = Cfloat128((r[2],r[1]))
-            end
+            r = llvmcall("""%u = bitcast <2 x double> %0 to fp128
+                            %v = bitcast <2 x double> %1 to fp128
+                            %f = inttoptr i64 %2 to fp128 (fp128, fp128)*
+                            %w = call x86_vectorcallcc fp128 %f(fp128 %u, fp128 %v)
+                            %vv = bitcast fp128 %w to <2 x double>
+                            ret <2 x double> %vv""",
+                         Cfloat128, Tuple{Cfloat128,Cfloat128,Ptr{Cvoid}},
+                         x.data, y.data, cglobal((@_symsym($func),quadoplib)))
             Float128(r)
         end
     end
 end
 
-# llvmcall does not recognize fneg
-# the constant is -0.0; why does LLVM swap quadwords?
 @noinline function (-)(x::Float128)
     r = llvmcall("""%u = bitcast <2 x double> %0 to fp128
-                    %v = fsub fp128 0xL00000000000000008000000000000000, %u
+                    %f = inttoptr i64 %1 to fp128 (fp128)*
+                    %v = call x86_vectorcallcc fp128 %f(fp128 %u)
                     %vv = bitcast fp128 %v to <2 x double>
                     ret <2 x double> %vv""",
-                 Cfloat128, Tuple{Cfloat128}, x.data)
+                 Cfloat128, Tuple{Cfloat128,Ptr{Cvoid}},
+                 x.data, cglobal((:__negtf2,quadoplib)))
     Float128(r)
 end
 
