@@ -1,6 +1,20 @@
 using Test
 using Quadmath
 
+@info "starting test run"
+    for j in (1.0,2.0,3.0)
+        print("Float128($j) is ")
+        display(reinterpret(UInt128,Float128(j)))
+        println()
+    end
+    print("sum is ")
+    display(reinterpret(UInt128,Float128(1.0) + Float128(2.0)))
+    println()
+    print("return trip for 2 is ")
+    display(reinterpret(UInt64,Float64(Float128(2.0))))
+    println()
+
+
 @testset "conversion $T" for T in (Float64, Float32, Int32, Int64, BigFloat, BigInt)
     @test Float128(T(1)) + Float128(T(2)) == Float128(T(3))
     @test Float128(T(1)) + Float128(T(2)) <= Float128(T(3))
@@ -14,6 +28,11 @@ using Quadmath
     print("sum is ")
     display(reinterpret(UInt128,Float128(T(1)) + Float128(T(2))))
     println()
+    if T == Float64
+        print("return trip for 2 is ")
+        display(reinterpret(UInt64,T(Float128(T(2)))))
+        println()
+    end
     if isbitstype(T)
         @test T(Float128(T(1)) + Float128(T(2))) === T(3)
     else
