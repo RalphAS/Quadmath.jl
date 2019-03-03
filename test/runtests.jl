@@ -1,7 +1,7 @@
 using Test
 using Quadmath
 
-@testset "conversion $T" for T in (Float64, Int32, Int64, BigFloat, BigInt)
+@testset "conversion $T" for T in (Float64, Float32, Int32, Int64, BigFloat, BigInt)
     @test Float128(T(1)) + Float128(T(2)) == Float128(T(3))
     @test Float128(T(1)) + Float128(T(2)) <= Float128(T(3))
     @test Float128(T(1)) + Float128(T(2)) != Float128(T(4))
@@ -11,6 +11,18 @@ using Quadmath
     else
         @test T(Float128(T(1)) + Float128(T(2))) == T(3)
     end
+end
+
+@testset "conversion Int128" begin
+    @test Float128(Int128(123)) == Float128(123.0)
+    x = Int128(UInt128(1) << 115)
+    @test Float128(x) == Float128(2.0^115)
+    @test Float128(-x) == Float128(-2.0^115)
+end
+@testset "conversion UInt128" begin
+    @test Float128(UInt128(123)) == Float128(123.0)
+    x = UInt128(1) << 115
+    @test Float128(x) == Float128(2.0^115)
 end
 
 @test Base.exponent_one(Float128) == reinterpret(UInt128, Float128(1.0))
@@ -26,7 +38,7 @@ end
     x = parse(Float128, "100.0")
     y = parse(Float128, "25.0")
     @test Float64(x+y) == Float64(BigInt(x) + BigInt(y))
-    @test x+y == Float128(BigInt(x) + BigInt(y))    
+    @test x+y == Float128(BigInt(x) + BigInt(y))
 end
 
 @testset "flipsign" begin
@@ -46,8 +58,10 @@ end
     fpart, ipart = modf(y)
     @test y == ipart + fpart
     @test signbit(fpart) == signbit(ipart) == true
-    
+
     z = x^3
     fpart, ipart = modf(x) .+ modf(y)
     @test x+y == ipart+fpart
 end
+
+include("rounding.jl")

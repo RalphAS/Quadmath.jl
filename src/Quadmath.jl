@@ -11,12 +11,13 @@ import Base: (*), +, -, /,  <, <=, ==, ^, convert,
           acos, acosh, asin, asinh, atan, atanh, cosh, cos,
           exp, expm1, log, log2, log10, log1p, sin, sinh, sqrt,
           tan, tanh,
-          ceil, floor, trunc, round, fma,
+          ceil, floor, trunc, round, fma, unsafe_trunc,
           copysign, flipsign, max, min, hypot, abs,
           ldexp, frexp, modf, nextfloat, eps,
           isinf, isnan, isfinite, isinteger,
           floatmin, floatmax, precision, signbit,
-          Int32, Int64, Float64, BigFloat, BigInt
+          Int32, Int64, Float64, BigFloat, BigInt,
+          Int8, UInt8, Int16, UInt16, UInt32, UInt64
 
 using Base: llvmcall
 
@@ -99,46 +100,209 @@ significand_mask(::Type{Float128}) = 0x0000_ffff_ffff_ffff_ffff_ffff_ffff_ffff
 
 fpinttype(::Type{Float128}) = UInt128
 
+# unsafe_trunc is needed to generate some other code, so it shows up early
+
+# This is a helper for unsafe_trunc (and maybe others).
+# It allows us to build static strings for LLVM calls from eval-time variables.
+macro _irstring1(key,rep,args...)
+    instrs = []
+    for a in args
+        push!(instrs, replace(a, key=>rep))
+    end
+    quote
+        $(join(instrs, "\n"))
+    end
+end
+
+for (Ti,Ui,lTi) in ((Int8, UInt8, :i8), (Int16, UInt16, :i16),
+                    (Int32, UInt32, :i32), (Int64, UInt64, :i64))
+    @eval begin
+        @noinline function unsafe_trunc(::Type{$Ti}, x::Float128)
+            llvmcall(@_irstring1("lTi",$lTi,
+                                 "%2 = bitcast <2 x double> %0 to fp128",
+                                 "%3 = fptosi fp128 %2 to lTi",
+                                 "ret lTi %3"),
+                     $Ti, Tuple{Cfloat128}, x.data)
+        end
+        @noinline function unsafe_trunc(::Type{$Ui}, x::Float128)
+            llvmcall(@_irstring1("lTi",$lTi,
+                                 "%2 = bitcast <2 x double> %0 to fp128",
+                                 "%3 = fptoui fp128 %2 to lTi",
+                                 "ret lTi %3"),
+                     $Ui, Tuple{Cfloat128}, x.data)
+        end
+    end
+end
+
+function unsafe_trunc(::Type{UInt128}, x::Float128)
+    xu = reinterpret(UInt128, x)
+    k = Int(xu >> 112) & 0x7fff - 16382 - 113 # cf. 1022 + 53 = 1075
+    xu = (xu & significand_mask(Float128)) | (UInt128(0x1) << 112)
+    if k <= 0
+        UInt128(xu >> -k)
+    else
+        UInt128(xu) << k
+    end
+end
+function unsafe_trunc(::Type{Int128}, x::Float128)
+    copysign(unsafe_trunc(UInt128,x) % Int128, x)
+end
+
 # conversion
 Float128(x::Float128) = x
 
 ## Float64
-function Float128(x::Float64)
+
+# WARNING: if this pattern is allowed to inline,
+# it sometimes puts LLVM into a coma.
+
+@noinline function Float128(x::Float64)
     r = llvmcall("""
             %v = fpext double %0 to fp128
             %vv = bitcast fp128 %v to <2 x double>
             ret <2 x double> %vv""", Cfloat128, Tuple{Cdouble}, x)
     Float128(r)
 end
-function Float64(x::Float128)
+
+# WARNING: if this pattern is allowed to inline,
+#   LLVM usually gets confused and crashes Julia.
+# example diagnostic:
+# LVM ERROR: Cannot select: 0x55ea03317110: f128 = bitcast 0x55ea03a77468
+#   0x55ea03a77468: v2f64,ch = CopyFromReg 0x55ea029ba530, Register:v2f64 %2
+#     0x55ea041f5948: v2f64 = Register %2
+
+@noinline function Float64(x::Float128)
     llvmcall("""
           %2 = bitcast <2 x double> %0 to fp128
           %3 = fptrunc fp128 %2 to double
           ret double %3""", Cdouble, Tuple{Cfloat128}, x.data)
 end
 
-# Float128(x::Float64) =
-#     Float128(ccall((:__extenddftf2, quadoplib), Cfloat128, (Cdouble,), x))
-# Float64(x::Float128) =
-#     ccall((:__trunctfdf2, quadoplib), Cdouble, (Cfloat128,), x)
+## Float32
 
+@noinline function Float128(x::Float32)
+    r = llvmcall("""
+            %v = fpext float %0 to fp128
+            %vv = bitcast fp128 %v to <2 x double>
+            ret <2 x double> %vv""", Cfloat128, Tuple{Cfloat}, x)
+    Float128(r)
+end
+
+@noinline function Float32(x::Float128)
+    llvmcall("""
+          %2 = bitcast <2 x double> %0 to fp128
+          %3 = fptrunc fp128 %2 to float
+          ret float %3""", Cfloat, Tuple{Cfloat128}, x.data)
+end
+
+
+## Integers
+
+@noinline function Float128(x::Int32)
+    r = llvmcall("""
+            %v = sitofp i32 %0 to fp128
+            %vv = bitcast fp128 %v to <2 x double>
+            ret <2 x double> %vv""", Cfloat128, Tuple{Cint}, x)
+    Float128(r)
+end
+
+@noinline function Float128(x::UInt32)
+    r = llvmcall("""
+            %v = uitofp i32 %0 to fp128
+            %vv = bitcast fp128 %v to <2 x double>
+            ret <2 x double> %vv""", Cfloat128, Tuple{Cuint}, x)
+    Float128(r)
+end
+
+@noinline function Float128(x::Int64)
+    r = llvmcall("""
+            %v = sitofp i64 %0 to fp128
+            %vv = bitcast fp128 %v to <2 x double>
+            ret <2 x double> %vv""", Cfloat128, Tuple{Clonglong}, x)
+    Float128(r)
+end
+
+@noinline function Float128(x::UInt64)
+    r = llvmcall("""
+            %v = uitofp i64 %0 to fp128
+            %vv = bitcast fp128 %v to <2 x double>
+            ret <2 x double> %vv""", Cfloat128, Tuple{Culonglong}, x)
+    Float128(r)
+end
+
+Float128(x::Int16) = Float128(Int32(x))
+Float128(x::Int8) = Float128(Int32(x))
+Float128(x::UInt16) = Float128(UInt32(x))
+Float128(x::UInt8) = Float128(UInt32(x))
+
+# TODO: rewrite [U]IntXX(::Float128) using unsafe_trunc
 Int32(x::Float128) =
     ccall((:__fixtfsi, quadoplib), Int32, (Cfloat128,), x)
-Float128(x::Int32) =
-    Float128(ccall((:__floatsitf, quadoplib), Cfloat128, (Int32,), x))
-
-Float128(x::UInt32) =
-    Float128(ccall((:__floatunsitf, quadoplib), Cfloat128, (UInt32,), x))
-
 Int64(x::Float128) =
     ccall((:__fixtfdi, quadoplib), Int64, (Cfloat128,), x)
-Float128(x::Int64) =
-    Float128(ccall((:__floatditf, quadoplib), Cfloat128, (Int64,), x))
 
+## [U]Int128
+
+function Float128(x::UInt128)
+    x == 0 && return Float128(0.0)
+    n = 128-leading_zeros(x) # ndigits0z(x,2)
+    if n <= 113
+        y = ((x % UInt128) << (113-n)) & significand_mask(Float128)
+    else
+        y = ((x >> (n-114)) % UInt128) & 0x001_ffff_ffff_ffff_ffff_ffff_ffff_ffff # keep 1 extra bit
+        y = (y+1)>>1 # round, ties up (extra leading bit in case of next exponent)
+        y &= ~UInt64(trailing_zeros(x) == (n-114)) # fix last bit to round to even
+    end
+    d = ((n+16382) % UInt128) << 112
+    # reinterpret(Float128, d + y)
+    d += y
+    y1 = reinterpret(Float64,UInt64(d >> 64))
+    y2 = reinterpret(Float64,(d % UInt64))
+    Float128((y2,y1))
+end
+
+function Float128(x::Int128)
+    x == 0 && return 0.0
+    s = reinterpret(UInt128,x) & sign_mask(Float128) # sign bit
+    x = abs(x) % UInt128
+    n = 128-leading_zeros(x) # ndigits0z(x,2)
+    if n <= 113
+        y = ((x % UInt128) << (113-n)) & significand_mask(Float128)
+    else
+        y = ((x >> (n-114)) % UInt128) & 0x0001_ffff_ffff_ffff_ffff_ffff_ffff_ffff # keep 1 extra bit
+        y = (y+1)>>1 # round, ties up (extra leading bit in case of next exponent)
+        y &= ~UInt64(trailing_zeros(x) == (n-114)) # fix last bit to round to even
+    end
+    d = ((n+16382) % UInt128) << 112
+    # reinterpret(Float128, s | d + y)
+    d = s | d + y
+    y1 = reinterpret(Float64,UInt64(d >> 64))
+    y2 = reinterpret(Float64,(d % UInt64))
+    Float128((y2,y1))
+end
+
+## Rational
 Float128(x::Rational{T}) where T = Float128(numerator(x))/Float128(denominator(x))
 
 # comparison
 
+for (op, lcond) in ((:<, :olt), (:<=, :ole), (Symbol("=="), :oeq))
+    @eval begin
+        @noinline function ($op)(x::Float128, y::Float128)
+            r = llvmcall(
+                @_irstring1("lCond",$lcond,
+                            "%u = bitcast <2 x double> %0 to fp128",
+                            "%v = bitcast <2 x double> %1 to fp128",
+                            "%w = fcmp lCond fp128 %u, %v",
+                            "%x = zext i1 %w to i8",
+                            "ret i8 %x"),
+                Cuchar, Tuple{Cfloat128,Cfloat128}, x.data, y.data)
+            reinterpret(Bool, r)
+        end
+    end
+end
+
+#=
 (==)(x::Float128, y::Float128) =
     ccall((:__eqtf2,quadoplib), Cint, (Cfloat128,Cfloat128), x, y) == 0
 
@@ -147,9 +311,38 @@ Float128(x::Rational{T}) where T = Float128(numerator(x))/Float128(denominator(x
 
 (<=)(x::Float128, y::Float128) =
     ccall((:__letf2,quadoplib), Cint, (Cfloat128,Cfloat128), x, y) <= 0
+=#
 
 # arithmetic
 
+for (op, lOp) in ((:+, :fadd), (:-, :fsub), (:*, :fmul), (:/, :fdiv))
+    @eval begin
+        @noinline function ($op)(x::Float128, y::Float128)
+            r = llvmcall(
+                @_irstring1("lOp",$lOp,
+                            "%u = bitcast <2 x double> %0 to fp128",
+                            "%v = bitcast <2 x double> %1 to fp128",
+                            "%w = lOp fp128 %u, %v",
+                            "%vv = bitcast fp128 %w to <2 x double>",
+                            "ret <2 x double> %vv"),
+                Cfloat128, Tuple{Cfloat128,Cfloat128}, x.data, y.data)
+            Float128(r)
+        end
+    end
+end
+
+# llvmcall does not recognize fneg
+# the constant is -0.0; why does LLVM swap quadwords?
+@noinline function (-)(x::Float128)
+    r = llvmcall("""%u = bitcast <2 x double> %0 to fp128
+                    %v = fsub fp128 0xL00000000000000008000000000000000, %u
+                    %vv = bitcast fp128 %v to <2 x double>
+                    ret <2 x double> %vv""",
+                 Cfloat128, Tuple{Cfloat128}, x.data)
+    Float128(r)
+end
+
+#=
 (+)(x::Float128, y::Float128) =
     Float128(ccall((:__addtf3,quadoplib), Cfloat128, (Cfloat128,Cfloat128), x, y))
 (-)(x::Float128, y::Float128) =
@@ -160,8 +353,12 @@ Float128(x::Rational{T}) where T = Float128(numerator(x))/Float128(denominator(x
     Float128(ccall((:__divtf3,quadoplib), Cfloat128, (Cfloat128,Cfloat128), x, y))
 (-)(x::Float128) =
     Float128(ccall((:__negtf2,quadoplib), Cfloat128, (Cfloat128,), x))
+=#
+
 (^)(x::Float128, y::Float128) =
     Float128(ccall((:powq, libquadmath), Cfloat128, (Cfloat128,Cfloat128), x, y))
+
+
 # math
 
 ## one argument
@@ -180,6 +377,11 @@ for (f,fc) in (:abs => :fabs,
     end
 end
 
+round(x::Float128, r::RoundingMode{:ToZero})  = trunc(x)
+round(x::Float128, r::RoundingMode{:Down})  = floor(x)
+round(x::Float128, r::RoundingMode{:Up})  = ceil(x)
+round(x::Float128, r::RoundingMode{:Nearest})  = round(x) # rint
+
 ## two argument
 for f in (:copysign, :hypot, )
     @eval function $f(x::Float128, y::Float128)
@@ -196,7 +398,7 @@ end
 ## misc
 fma(x::Float128, y::Float128, z::Float128) =
     Float128(ccall((:fmaq,libquadmath), Cfloat128, (Cfloat128, Cfloat128, Cfloat128), x, y, z))
-    
+
 isnan(x::Float128) =
     0 != ccall((:isnanq,libquadmath), Cint, (Cfloat128, ), x)
 isinf(x::Float128) =
