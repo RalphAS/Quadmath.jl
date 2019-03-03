@@ -6,6 +6,9 @@ using Quadmath
     @test Float128(T(1)) + Float128(T(2)) <= Float128(T(3))
     @test Float128(T(1)) + Float128(T(2)) != Float128(T(4))
     @test Float128(T(1)) + Float128(T(2)) < Float128(T(4))
+    for j=1:3
+        println("Float128($T($j)) is ",reinterpret(UInt128,Float128(T(j))))
+    end
     if isbitstype(T)
         @test T(Float128(T(1)) + Float128(T(2))) === T(3)
     else

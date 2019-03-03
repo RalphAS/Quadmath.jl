@@ -161,6 +161,10 @@ Float128(x::Float128) = x
             %v = fpext double %0 to fp128
             %vv = bitcast fp128 %v to <2 x double>
             ret <2 x double> %vv""", Cfloat128, Tuple{Cdouble}, x)
+    # experiment to test hypothesis
+    if Sys.iswindows()
+        r = Cfloat128((r[2],r[1]))
+    end
     Float128(r)
 end
 
