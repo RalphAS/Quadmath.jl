@@ -164,12 +164,12 @@ Float128(x::Float128) = x
 
 @noinline function Float128(x::Float64)
     r = llvmcall("""
-            %f = inttoptr i64 %1 to fp128 (double)*
-            %v = call x86_vectorcallcc fp128 %f(double %0)
-            %vv = bitcast fp128 %v to <2 x double>
+            %f = inttoptr i64 %1 to <2 x double> (double)*
+            %vv = call x86_vectorcallcc <2 x double>  %f(double %0)
             ret <2 x double> %vv""", Cfloat128, Tuple{Cdouble,Ptr{Cvoid}},
                  x, cglobal((:__extenddftf2,quadoplib)))
-    Float128(_winswap(r))
+    rr = _winswap(r)
+    Float128(rr)
 end
 
 # WARNING: if this pattern is allowed to inline,
@@ -180,9 +180,8 @@ end
 #     0x55ea041f5948: v2f64 = Register %2
 
 @noinline function Float64(x::Float128)
-    llvmcall("""%u = bitcast <2 x double> %0 to fp128
-                %f = inttoptr i64 %1 to double (fp128)*
-                %v = call x86_vectorcallcc double %f(fp128 %u)
+    llvmcall("""%f = inttoptr i64 %1 to double (<2 x double>)*
+                %v = call x86_vectorcallcc double %f(<2 x double> %0)
                 ret double %v""",
              Cdouble, Tuple{Cfloat128,Ptr{Cvoid}},
              x.data, cglobal((:__trunctfdf2,quadoplib)))
@@ -330,15 +329,13 @@ end
 for (op, func) in ((:+, :__addtf3), (:-, :__subtf3), (:*, :__multf3), (:/, :__divtf3))
     @eval begin
         @noinline function ($op)(x::Float128, y::Float128)
-            r = llvmcall("""%u = bitcast <2 x double> %0 to fp128
-                            %v = bitcast <2 x double> %1 to fp128
-                            %f = inttoptr i64 %2 to fp128 (fp128, fp128)*
-                            %w = call x86_vectorcallcc fp128 %f(fp128 %u, fp128 %v)
-                            %vv = bitcast fp128 %w to <2 x double>
+            r = llvmcall("""%f = inttoptr i64 %2 to <2 x double> (<2 x double>, <2 x double>)*
+                            %vv = call x86_vectorcallcc <2 x double> %f(<2 x double> %0, <2 x double> %1)
                             ret <2 x double> %vv""",
                          Cfloat128, Tuple{Cfloat128,Cfloat128,Ptr{Cvoid}},
                          x.data, y.data, cglobal((@_symsym($func),quadoplib)))
-            Float128(_winswap(r))
+            rr = _winswap(r)
+            Float128(rr)
         end
     end
 end
