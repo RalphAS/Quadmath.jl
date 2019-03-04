@@ -71,12 +71,6 @@ end
 #    end
 #    const Cfloat128 = Float128
 # end
-if Sys.iswindows()
-    _winswap(r) = Cfloat128((r[2],r[1]))
-else
-    _winswap(r) = r
-end
-
 
 function __init__()
     @require SpecialFunctions="276daf66-3868-5448-9aa4-cd146d93841b" begin
@@ -168,8 +162,7 @@ Float128(x::Float128) = x
             %vv = call x86_vectorcallcc <2 x double>  %f(double %0)
             ret <2 x double> %vv""", Cfloat128, Tuple{Cdouble,Ptr{Cvoid}},
                  x, cglobal((:__extenddftf2,quadoplib)))
-    rr = _winswap(r)
-    Float128(rr)
+    Float128(r)
 end
 
 # WARNING: if this pattern is allowed to inline,
@@ -334,8 +327,7 @@ for (op, func) in ((:+, :__addtf3), (:-, :__subtf3), (:*, :__multf3), (:/, :__di
                             ret <2 x double> %vv""",
                          Cfloat128, Tuple{Cfloat128,Cfloat128,Ptr{Cvoid}},
                          x.data, y.data, cglobal((@_symsym($func),quadoplib)))
-            rr = _winswap(r)
-            Float128(rr)
+            Float128(r)
         end
     end
 end

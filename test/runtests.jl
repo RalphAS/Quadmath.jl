@@ -1,6 +1,38 @@
 using Test
 using Quadmath
 
+using Quadmath: quadoplib, Cfloat128
+@noinline function foobar(y::Float64)
+    x = 3.0*y
+    r = Base.llvmcall("""
+            %f = inttoptr i64 %1 to <2 x double> (double)*
+            %vv = call x86_vectorcallcc <2 x double>  %f(double %0)
+            ret <2 x double> %vv""", Cfloat128, Tuple{Cdouble,Ptr{Cvoid}},
+                 x, cglobal((:__extenddftf2,quadoplib)))
+    Float128(r)
+end
+using InteractiveUtils
+@code_native foobar(1.0)
+print("foobar(1.0) returns ")
+display(reinterpret(UInt128,foobar(1.0)))
+println()
+
+function baz(x::Float128, y::Float128)
+    r = Base.llvmcall("""%f = inttoptr i64 %2 to <2 x double> (<2 x double>, <2 x double>)*
+                    %vv = call x86_vectorcallcc <2 x double> %f(<2 x double> %0, <2 x double> %1)
+                    ret <2 x double> %vv""",
+                 Cfloat128, Tuple{Cfloat128,Cfloat128,Ptr{Cvoid}},
+                 x.data, y.data, cglobal((:__addtf3,quadoplib)))
+    Float128(r)
+end
+x3 = reinterpret(Float128, 0x40008000000000000000000000000000)
+x2 = reinterpret(Float128, 0x40000000000000000000000000000000)
+@code_native baz(x2,x3)
+print("baz(x2,x3) returns ")
+display(reinterpret(UInt128,baz(x2,x3)))
+println()
+
+
 @info "starting test run"
     for j in (1.0,2.0,3.0)
         print("Float128($j) is ")
