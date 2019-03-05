@@ -153,31 +153,21 @@ Float128(x::Float128) = x
 
 ## Float64
 
-# WARNING: if this pattern is allowed to inline,
-# it sometimes puts LLVM into a coma.
-
-@noinline function Float128(x::Float64)
-    r = llvmcall("""
-            %f = inttoptr i64 %1 to <2 x double> (double)*
-            %vv = call x86_vectorcallcc <2 x double>  %f(double %0)
-            ret <2 x double> %vv""", Cfloat128, Tuple{Cdouble,Ptr{Cvoid}},
-                 x, cglobal((:__extenddftf2,quadoplib)))
-    Float128(r)
-end
-
-# WARNING: if this pattern is allowed to inline,
-#   LLVM usually gets confused and crashes Julia.
-# example diagnostic:
-# LVM ERROR: Cannot select: 0x55ea03317110: f128 = bitcast 0x55ea03a77468
-#   0x55ea03a77468: v2f64,ch = CopyFromReg 0x55ea029ba530, Register:v2f64 %2
-#     0x55ea041f5948: v2f64 = Register %2
-
-@noinline function Float64(x::Float128)
-    llvmcall("""%f = inttoptr i64 %1 to double (<2 x double>)*
-                %v = call x86_vectorcallcc double %f(<2 x double> %0)
-                ret double %v""",
-             Cdouble, Tuple{Cfloat128,Ptr{Cvoid}},
-             x.data, cglobal((:__trunctfdf2,quadoplib)))
+if Sys.iswindows()
+    function Float128(x::Float64)
+        r = Ref{Cfloat128}()
+        ccall((:__extenddftf2,quadoplib),
+                       Cvoid, (Ptr{Cfloat128}, Cdouble), r, x)
+        Float128(r[])
+    end
+    function Float64(x::Float128)
+        ccall((:__trunctfdf2,quadoplib), Cdouble, (Ref{Cfloat128},), x.data)
+    end
+else
+    Float128(x::Float64) =
+        Float128(ccall((:__extenddftf2,quadoplib), Cfloat128, (Cdouble,), x))
+    Float64(x::Float128) =
+        ccall((:__trunctfdf2,quadoplib), Cdouble, (Cfloat128,), x)
 end
 
 ## Float32
@@ -286,8 +276,12 @@ end
 ## Rational
 Float128(x::Rational{T}) where T = Float128(numerator(x))/Float128(denominator(x))
 
-# comparison
+macro _symsym(x)
+    return Expr(:quote, x)
+end
 
+# comparison
+#=
 for (op, lcond) in ((:<, :olt), (:<=, :ole), (Symbol("=="), :oeq))
     @eval begin
         @noinline function ($op)(x::Float128, y::Float128)
@@ -303,31 +297,46 @@ for (op, lcond) in ((:<, :olt), (:<=, :ole), (Symbol("=="), :oeq))
         end
     end
 end
-
-#=
-(==)(x::Float128, y::Float128) =
-    ccall((:__eqtf2,quadoplib), Cint, (Cfloat128,Cfloat128), x, y) == 0
-
-(<)(x::Float128, y::Float128) =
-    ccall((:__letf2,quadoplib), Cint, (Cfloat128,Cfloat128), x, y) == -1
-
-(<=)(x::Float128, y::Float128) =
-    ccall((:__letf2,quadoplib), Cint, (Cfloat128,Cfloat128), x, y) <= 0
 =#
-macro _symsym(x)
-    return Expr(:quote, x)
+if Sys.iswindows()
+    (==)(x::Float128, y::Float128) =
+        ccall((:__eqtf2,quadoplib),
+              Cint, (Ref{Cfloat128},Ref{Cfloat128}), x.data, y.data) == 0
+    (<)(x::Float128, y::Float128) =
+        ccall((:__letf2,quadoplib),
+              Cint, (Ref{Cfloat128},Ref{Cfloat128}), x.data, y.data) == -1
+    (<=)(x::Float128, y::Float128) =
+        ccall((:__letf2,quadoplib),
+              Cint, (Ref{Cfloat128},Ref{Cfloat128}), x.data, y.data) <= 0
+else
+    (==)(x::Float128, y::Float128) =
+        ccall((:__eqtf2,quadoplib), Cint, (Cfloat128,Cfloat128), x, y) == 0
+
+    (<)(x::Float128, y::Float128) =
+        ccall((:__letf2,quadoplib), Cint, (Cfloat128,Cfloat128), x, y) == -1
+
+    (<=)(x::Float128, y::Float128) =
+        ccall((:__letf2,quadoplib), Cint, (Cfloat128,Cfloat128), x, y) <= 0
 end
 
 # arithmetic
 for (op, func) in ((:+, :__addtf3), (:-, :__subtf3), (:*, :__multf3), (:/, :__divtf3))
-    @eval begin
-        @noinline function ($op)(x::Float128, y::Float128)
-            r = llvmcall("""%f = inttoptr i64 %2 to <2 x double> (<2 x double>, <2 x double>)*
-                            %vv = call x86_vectorcallcc <2 x double> %f(<2 x double> %0, <2 x double> %1)
-                            ret <2 x double> %vv""",
-                         Cfloat128, Tuple{Cfloat128,Cfloat128,Ptr{Cvoid}},
-                         x.data, y.data, cglobal((@_symsym($func),quadoplib)))
-            Float128(r)
+    if Sys.iswindows()
+        @eval begin
+            function ($op)(x::Float128, y::Float128)
+                r = Ref{Cfloat128}()
+                ccall((@_symsym($func),quadoplib),
+                      Cvoid, (Ptr{Cfloat128},Ref{Cfloat128},Ref{Cfloat128}),
+                      r, x.data, y.data)
+                Float128(r[])
+            end
+        end
+    else
+        @eval begin
+            function ($op)(x::Float128, y::Float128)
+                Float128(ccall((@_symsym($func),quadoplib),
+                               Cfloat128, (Cfloat128,Cfloat128), x, y))
+            end
         end
     end
 end
