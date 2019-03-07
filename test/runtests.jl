@@ -11,21 +11,23 @@ function foo(x::Float128,y::Float128)
     Float128(ccall((:__addtf3,quadoplib),
                    Cfloat128, (Ref{Cfloat128},Ref{Cfloat128}), x, y))
 end
+@show reinterpret(UInt128,foo(Float128(3.0),Float128(3.0)))
+=#
 let y = reinterpret(Float128, 0x40008000000000000000000000000000)
     @code_native frexp(y)
     @code_native ldexp(y, 2)
-    @code_native foo(y,y)
+    @code_native ==(y,y)
+#    @code_native foo(y,y)
 end
-@show reinterpret(UInt128,foo(Float128(3.0),Float128(3.0)))
-=#
+
 
 @testset "fp decomp" begin
     y = Float128(2.0)
+    z = ldexp(Float128(0.5), 2)
+    @test z == y
     x,n = frexp(y)
     @test x == Float128(0.5)
     @test n == 2
-    z = ldexp(Float128(0.5), 2)
-    @test z == y
 end
 
 @testset "conversion $T" for T in (Float64, Int32, Int64, BigFloat, BigInt)
