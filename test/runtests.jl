@@ -4,6 +4,8 @@ using Quadmath
 using InteractiveUtils
 @show reinterpret(UInt128,Float128(3.0))
 
+@show reinterpret(UInt128,Float128(3.0) + Float128(4.0))
+#=
 using Quadmath: quadoplib, Cfloat128
 function foo(x::Float128,y::Float128)
     Float128(ccall((:__addtf3,quadoplib),
@@ -15,8 +17,8 @@ let y = reinterpret(Float128, 0x40008000000000000000000000000000)
     @code_native foo(y,y)
 end
 @show reinterpret(UInt128,foo(Float128(3.0),Float128(3.0)))
+=#
 
-#=
 @testset "fp decomp" begin
     y = Float128(2.0)
     x,n = frexp(y)
@@ -25,7 +27,7 @@ end
     z = ldexp(Float128(0.5), 2)
     @test z == y
 end
-=#
+
 @testset "conversion $T" for T in (Float64, Int32, Int64, BigFloat, BigInt)
     @test Float128(T(1)) + Float128(T(2)) == Float128(T(3))
     @test Float128(T(1)) + Float128(T(2)) <= Float128(T(3))
