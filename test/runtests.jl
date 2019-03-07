@@ -2,11 +2,19 @@ using Test
 using Quadmath
 
 using InteractiveUtils
+@show reinterpret(UInt128,Float128(3.0))
+
+using Quadmath: quadoplib, Cfloat128
+function foo(x::Float128,y::Float128)
+    Float128(ccall((:__addtf3,quadoplib),
+                   Cfloat128, (Ref{Cfloat128},Ref{Cfloat128}), x, y))
+end
 let y = reinterpret(Float128, 0x40008000000000000000000000000000)
     @code_native frexp(y)
     @code_native ldexp(y, 2)
+    @code_native foo(y,y)
 end
-@show reinterpret(UInt128,Float128(3.0))
+@show reinterpret(UInt128,foo(Float128(3.0),Float128(3.0)))
 
 #=
 @testset "fp decomp" begin
