@@ -1,6 +1,12 @@
 using Test
 using Quadmath
 
+using InteractiveUtils
+let y = reinterpret(Float128, 0x40008000000000000000000000000000)
+    @code_native frexp(y)
+    @code_native ldexp(y, 2)
+end
+
 @testset "fp decomp" begin
     y = Float128(2.0)
     x,n = frexp(y)
