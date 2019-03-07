@@ -6,7 +6,9 @@ let y = reinterpret(Float128, 0x40008000000000000000000000000000)
     @code_native frexp(y)
     @code_native ldexp(y, 2)
 end
+@show reinterpret(UInt128,Float128(3.0))
 
+#=
 @testset "fp decomp" begin
     y = Float128(2.0)
     x,n = frexp(y)
@@ -15,7 +17,7 @@ end
     z = ldexp(Float128(0.5), 2)
     @test z == y
 end
-
+=#
 @testset "conversion $T" for T in (Float64, Int32, Int64, BigFloat, BigInt)
     @test Float128(T(1)) + Float128(T(2)) == Float128(T(3))
     @test Float128(T(1)) + Float128(T(2)) <= Float128(T(3))
