@@ -235,7 +235,7 @@ Float128(x::Rational{T}) where T = Float128(numerator(x))/Float128(denominator(x
 
 # comparison
 
-if Sys.iswindows()
+if _WIN_PTR_ABI
     (==)(x::Float128, y::Float128) =
         ccall((:__eqtf2,quadoplib),
               Cint, (Ref{Cfloat128},Ref{Cfloat128}), x, y) == 0
@@ -478,7 +478,7 @@ elseif Sys.iswindows()
         function frexp(x::Float128)
             r = Ref{Cint}()
             y = Float128(ccall((:frexpq, libquadmath),
-                               Cfloat128, (Ref{Cfloat128}, Ptr{Cint}), x, r))
+                               Cfloat128, (Cfloat128, Ptr{Cint}), x, r))
             return y, Int(r[])
         end
 else
