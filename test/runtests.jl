@@ -19,6 +19,7 @@ let y = reinterpret(Float128, 0x40008000000000000000000000000000)
     @code_native frexp(y)
     @code_native ldexp(y, 2)
     @code_native ==(y,y)
+    @code_native +(y,y)
 #    @code_native foo(y,y)
 end
 
