@@ -5,6 +5,8 @@ using InteractiveUtils
 @show reinterpret(UInt128,Float128(3.0))
 
 @show reinterpret(UInt128,Float128(3.0) + Float128(4.0))
+@show Float64(Float128(3.0))
+@show Float64(3.0) == Float64(3.0)
 #=
 using Quadmath: quadoplib, Cfloat128
 function foo(x::Float128,y::Float128)
