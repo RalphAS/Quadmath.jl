@@ -11,12 +11,13 @@ import Base: (*), +, -, /,  <, <=, ==, ^, convert,
           acos, acosh, asin, asinh, atan, atanh, cosh, cos,
           exp, expm1, log, log2, log10, log1p, sin, sinh, sqrt,
           tan, tanh,
-          ceil, floor, trunc, round, fma,
+          ceil, floor, trunc, round, fma, unsafe_trunc,
           copysign, flipsign, max, min, hypot, abs,
           ldexp, frexp, modf, nextfloat, uabs, typemax, typemin, eps,
           isinf, isnan, isfinite, isinteger,
           floatmin, floatmax, precision, signbit,
-          Int32, Int64, Float64, BigFloat, BigInt
+          Int32, Int64, Float32, Float64, BigFloat, BigInt,
+          Int8, UInt8, Int16, UInt16, UInt32, UInt64, Int128, UInt128
 
 if Sys.isapple()
     const quadoplib = "libquadmath.0"
@@ -189,7 +190,7 @@ fpinttype(::Type{Float128}) = UInt128
 # conversion
 Float128(x::Float128) = x
 
-## Float64
+## Float64, Float32
 if _WIN_PTR_ABI
     function Float128(x::Float64)
         r = Ref{Cfloat128}()
@@ -200,16 +201,28 @@ if _WIN_PTR_ABI
     function Float64(x::Float128)
         ccall((:__trunctfdf2,quadoplib), Cdouble, (Ref{Cfloat128},), x)
     end
+    function Float128(x::Float32)
+        r = Ref{Cfloat128}()
+        ccall((:__extendsftf2,quadoplib),
+                       Cvoid, (Ptr{Cfloat128}, Cfloat), r, x)
+        Float128(r[])
+    end
+    function Float32(x::Float128)
+        ccall((:__trunctfsf2,quadoplib), Cfloat, (Ref{Cfloat128},), x)
+    end
 else
     Float128(x::Float64) =
         Float128(ccall((:__extenddftf2, quadoplib), Cfloat128, (Cdouble,), x))
     Float64(x::Float128) =
         ccall((:__trunctfdf2, quadoplib), Cdouble, (Cfloat128,), x)
+    Float128(x::Float32) =
+        Float128(ccall((:__extendsftf2, quadoplib), Cfloat128, (Cfloat,), x))
+    Float32(x::Float128) =
+        ccall((:__trunctfsf2, quadoplib), Cfloat, (Cfloat128,), x)
 end
 
+# integer -> Float128
 if _WIN_PTR_ABI
-    Int32(x::Float128) =
-        ccall((:__fixtfsi, quadoplib), Int32, (Ref{Cfloat128},), x)
     function Float128(x::Int32)
         r = Ref{Cfloat128}()
         ccall((:__floatsitf, quadoplib), Cvoid, (Ptr{Cfloat128}, Int32,), r, x)
@@ -222,27 +235,81 @@ if _WIN_PTR_ABI
         Float128(r[])
     end
 
-    Int64(x::Float128) =
-        ccall((:__fixtfdi, quadoplib), Int64, (Ref{Cfloat128},), x)
     function Float128(x::Int64)
         r = Ref{Cfloat128}()
         ccall((:__floatditf, quadoplib), Cvoid, (Ptr{Cfloat128}, Int64,), r, x)
         Float128(r[])
     end
+    function Float128(x::UInt64)
+        r = Ref{Cfloat128}()
+        ccall((:__floatunditf, quadoplib), Cvoid, (Ptr{Cfloat128}, UInt64,), r, x)
+        Float128(r[])
+    end
 else
-    Int32(x::Float128) =
-        ccall((:__fixtfsi, quadoplib), Int32, (Cfloat128,), x)
     Float128(x::Int32) =
         Float128(ccall((:__floatsitf, quadoplib), Cfloat128, (Int32,), x))
 
     Float128(x::UInt32) =
         Float128(ccall((:__floatunsitf, quadoplib), Cfloat128, (UInt32,), x))
 
-    Int64(x::Float128) =
-        ccall((:__fixtfdi, quadoplib), Int64, (Cfloat128,), x)
     Float128(x::Int64) =
         Float128(ccall((:__floatditf, quadoplib), Cfloat128, (Int64,), x))
+    Float128(x::UInt64) =
+        Float128(ccall((:__floatunditf, quadoplib), Cfloat128, (UInt64,), x))
 end
+
+Float128(x::Int16) = Float128(Int32(x))
+Float128(x::Int8) = Float128(Int32(x))
+Float128(x::UInt16) = Float128(UInt32(x))
+Float128(x::UInt8) = Float128(UInt32(x))
+
+function Float128(x::UInt128)
+    x == 0 && return Float128(0.0)
+    n = 128-leading_zeros(x) # ndigits0z(x,2)
+    if n <= 113
+        y = ((x % UInt128) << (113-n)) & significand_mask(Float128)
+    else
+        y = ((x >> (n-114)) % UInt128) & 0x001_ffff_ffff_ffff_ffff_ffff_ffff_ffff # keep 1 extra bit
+        y = (y+1)>>1 # round, ties up (extra leading bit in case of next exponent)
+        y &= ~UInt64(trailing_zeros(x) == (n-114)) # fix last bit to round to even
+    end
+    d = ((n+16382) % UInt128) << 112
+    # reinterpret(Float128, d + y)
+    d += y
+    if Sys.iswindows()
+        return reinterpret(Float128,d)
+    else
+        y1 = reinterpret(Float64,UInt64(d >> 64))
+        y2 = reinterpret(Float64,(d % UInt64))
+        return Float128((y2,y1))
+    end
+end
+
+function Float128(x::Int128)
+    x == 0 && return 0.0
+    s = reinterpret(UInt128,x) & sign_mask(Float128) # sign bit
+    x = abs(x) % UInt128
+    n = 128-leading_zeros(x) # ndigits0z(x,2)
+    if n <= 113
+        y = ((x % UInt128) << (113-n)) & significand_mask(Float128)
+    else
+        y = ((x >> (n-114)) % UInt128) & 0x0001_ffff_ffff_ffff_ffff_ffff_ffff_ffff # keep 1 extra bit
+        y = (y+1)>>1 # round, ties up (extra leading bit in case of next exponent)
+        y &= ~UInt64(trailing_zeros(x) == (n-114)) # fix last bit to round to even
+    end
+    d = ((n+16382) % UInt128) << 112
+    # reinterpret(Float128, s | d + y)
+    d = s | d + y
+    if Sys.iswindows()
+        return reinterpret(Float128,d)
+    else
+        y1 = reinterpret(Float64,UInt64(d >> 64))
+        y2 = reinterpret(Float64,(d % UInt64))
+        Float128((y2,y1))
+    end
+end
+
+# Float128 -> integer requires arithmetic, so is below
 
 Float128(x::Rational{T}) where T = Float128(numerator(x))/Float128(denominator(x))
 
@@ -322,6 +389,94 @@ else
         Float128(ccall((:__negtf2,quadoplib), Cfloat128, (Cfloat128,), x))
 end
 
+# Float128 -> integer
+
+if _WIN_PTR_ABI
+    unsafe_trunc(::Type{Int32}, x::Float128) =
+        ccall((:__fixtfsi, quadoplib), Int32, (Ref{Cfloat128},), x)
+    unsafe_trunc(::Type{Int64}, x::Float128) =
+        ccall((:__fixtfdi, quadoplib), Int64, (Ref{Cfloat128},), x)
+    unsafe_trunc(::Type{UInt32}, x::Float128) =
+        ccall((:__fixunstfsi, quadoplib), UInt32, (Ref{Cfloat128},), x)
+    unsafe_trunc(::Type{UInt64}, x::Float128) =
+        ccall((:__fixunstfdi, quadoplib), UInt64, (Ref{Cfloat128},), x)
+else
+    unsafe_trunc(::Type{Int32}, x::Float128) =
+        ccall((:__fixtfsi, quadoplib), Int32, (Cfloat128,), x)
+    unsafe_trunc(::Type{Int64}, x::Float128) =
+        ccall((:__fixtfdi, quadoplib), Int64, (Cfloat128,), x)
+    unsafe_trunc(::Type{UInt32}, x::Float128) =
+        ccall((:__fixunstfsi, quadoplib), UInt32, (Cfloat128,), x)
+    unsafe_trunc(::Type{UInt64}, x::Float128) =
+        ccall((:__fixunstfdi, quadoplib), UInt64, (Cfloat128,), x)
+end
+
+function unsafe_trunc(::Type{UInt128}, x::Float128)
+    xu = reinterpret(UInt128,x)
+    k = (Int64(xu >> 112) & 0x07fff) - 16382 - 113
+    xu = (xu & significand_mask(Float128)) | 0x0001_0000_0000_0000_0000_0000_0000_0000
+    if k <= 0
+        UInt128(xu >> -k)
+    else
+        UInt128(xu) << k
+    end
+end
+function unsafe_trunc(::Type{Int128}, x::Float128)
+    copysign(unsafe_trunc(UInt128,x) % Int128, x)
+end
+trunc(::Type{Signed}, x::Float128) = trunc(Int,x)
+trunc(::Type{Unsigned}, x::Float128) = trunc(Int,x)
+trunc(::Type{Integer}, x::Float128) = trunc(Int,x)
+
+for Ti in (Int32, Int64, Int128, UInt32, UInt64, UInt128)
+    let Tf = Float128
+        if Ti <: Unsigned || sizeof(Ti) < sizeof(Tf)
+            # Here `Tf(typemin(Ti))-1` is exact, so we can compare the lower-bound
+            # directly. `Tf(typemax(Ti))+1` is either always exactly representable, or
+            # rounded to `Inf` (e.g. when `Ti==UInt128 && Tf==Float32`).
+            @eval begin
+                function trunc(::Type{$Ti},x::$Tf)
+                    if $(Tf(typemin(Ti))-one(Tf)) < x < $(Tf(typemax(Ti))+one(Tf))
+                        return unsafe_trunc($Ti,x)
+                    else
+                        throw(InexactError(:trunc, $Ti, x))
+                    end
+                end
+                function (::Type{$Ti})(x::$Tf)
+                    if ($(Tf(typemin(Ti))) <= x <= $(Tf(typemax(Ti)))) && (round(x, RoundToZero) == x)
+                        return unsafe_trunc($Ti,x)
+                    else
+                        throw(InexactError($(Expr(:quote,Ti.name.name)), $Ti, x))
+                    end
+                end
+            end
+        else
+            # Here `eps(Tf(typemin(Ti))) > 1`, so the only value which can be truncated to
+            # `Tf(typemin(Ti)` is itself. Similarly, `Tf(typemax(Ti))` is inexact and will
+            # be rounded up. This assumes that `Tf(typemin(Ti)) > -Inf`, which is true for
+            # these types, but not for `Float16` or larger integer types.
+            @eval begin
+                function trunc(::Type{$Ti},x::$Tf)
+                    if $(Tf(typemin(Ti))) <= x < $(Tf(typemax(Ti)))
+                        return unsafe_trunc($Ti,x)
+                    else
+                        throw(InexactError(:trunc, $Ti, x))
+                    end
+                end
+                function (::Type{$Ti})(x::$Tf)
+                    if ($(Tf(typemin(Ti))) <= x < $(Tf(typemax(Ti)))) && (round(x, RoundToZero) == x)
+                        return unsafe_trunc($Ti,x)
+                    else
+                        throw(InexactError($(Expr(:quote,Ti.name.name)), $Ti, x))
+                    end
+                end
+            end
+        end
+    end
+end
+
+# math
+
 if _WIN_PTR_ABI
     function (^)(x::Float128, y::Float128)
         r = Ref{Cfloat128}()
@@ -342,8 +497,6 @@ else
         Float128(ccall((:powq, libquadmath), Cfloat128,
                        (Cfloat128,Cfloat128), x, y))
 end
-
-# math
 
 ## one argument
 for f in (:acos, :acosh, :asin, :asinh, :atan, :atanh, :cosh, :cos,
@@ -396,6 +549,10 @@ for (f,fc) in (:abs => :fabs,
         end
     end
 end
+
+round(x::Float128, r::RoundingMode{:Down}) = floor(x)
+round(x::Float128, r::RoundingMode{:Up}) = ceil(x)
+round(x::Float128, r::RoundingMode{:ToZero}) = round(x)
 
 ## two argument
 for f in (:copysign, :hypot, )
@@ -744,6 +901,16 @@ if _WIN_PTR_ABI
         lng = ccall((:quadmath_snprintf,libquadmath),
                     Cint, (Ptr{UInt8}, Csize_t, Ptr{UInt8}, Ref{Cfloat128}...),
                     buf, lng + 1, "%.35Qe", x)
+        return String(resize!(buf, lng))
+    end
+elseif Sys.iswindows()
+    function string(x::Float128)
+        lng = 64
+        buf = Array{UInt8}(undef, lng + 1)
+        dummy = Int32(0) # for argument alignment on stack
+        lng = ccall((:quadmath_snprintf,libquadmath),
+                    Cint, (Ptr{UInt8}, Csize_t, Ptr{UInt8}, Cint, Cfloat128...),
+                    buf, lng + 1, "%.35Qe", dummy, x)
         return String(resize!(buf, lng))
     end
 else
