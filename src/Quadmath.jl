@@ -498,6 +498,8 @@ else
                        (Cfloat128,Cfloat128), x, y))
 end
 
+@inline ^(x::Float128, y::Integer) = x^Float128(y)
+
 ## one argument
 for f in (:acos, :acosh, :asin, :asinh, :atan, :atanh, :cosh, :cos,
           :erf, :erfc, :exp, :expm1, :log, :log2, :log10, :log1p,
@@ -926,5 +928,11 @@ end
 
 print(io::IO, b::Float128) = print(io, string(b))
 show(io::IO, b::Float128) = print(io, string(b))
+
+# these are placeholders to avoid stupid surprises until the right thing is done
+Base.Printf.fix_dec(x::Float128, i::Int, digits) =
+    Base.Printf.fix_dec(Float64(x), i, digits)
+Base.Printf.ini_dec(x::Float128, i::Int, digits) =
+    Base.Printf.ini_dec(Float64(x), i, digits)
 
 end # module Quadmath
