@@ -95,89 +95,9 @@ end
 
 function __init__()
     @require SpecialFunctions="276daf66-3868-5448-9aa4-cd146d93841b" begin
-      import .SpecialFunctions
-
-      if _WIN_PTR_ABI
-          function SpecialFunctions.erf(x::Float128)
-              r = Ref{Float128}()
-              ccall((:erfq, libquadmath),
-                    Cvoid, (Ptr{Cfloat128}, Ref{Cfloat128}), r, x)
-              Float128(r[])
-          end
-          function SpecialFunctions.erfc(x::Float128)
-              r = Ref{Float128}()
-              ccall((:erfcq, libquadmath),
-                    Cvoid, (Ptr{Cfloat128}, Ref{Cfloat128}), r, x)
-              Float128(r[])
-          end
-          function SpecialFunctions.besselj0(x::Float128)
-              r = Ref{Float128}()
-              ccall((:j0q, libquadmath),
-                    Cvoid, (Ptr{Cfloat128}, Ref{Cfloat128}), r, x)
-              Float128(r[])
-          end
-          function SpecialFunctions.besselj1(x::Float128)
-              r = Ref{Float128}()
-              ccall((:j1q, libquadmath),
-                    Cvoid, (Ptr{Cfloat128}, Ref{Cfloat128}), r, x)
-              Float128(r[])
-          end
-          function SpecialFunctions.bessely0(x::Float128)
-              r = Ref{Float128}()
-              ccall((:y0q, libquadmath),
-                    Cvoid, (Ptr{Cfloat128}, Ref{Cfloat128}), r, x)
-              Float128(r[])
-          end
-          function SpecialFunctions.bessely1(x::Float128)
-              r = Ref{Float128}()
-              ccall((:y1q, libquadmath),
-                    Cvoid, (Ptr{Cfloat128}, Ref{Cfloat128}), r, x)
-              Float128(r[])
-          end
-          function SpecialFunctions.besselj(n::Cint, x::Float128)
-              r = Ref{Float128}()
-              ccall((:jnq, libquadmath),
-                    Cvoid, (Ptr{Cfloat128}, Cint, Ref{Cfloat128}), r, n, x)
-              Float128(r[])
-          end
-          function SpecialFunctions.bessely(n::Cint, x::Float128)
-              r = Ref{Float128}()
-              ccall((:ynq, libquadmath),
-                    Cvoid, (Ptr{Cfloat128}, Cint, Ref{Cfloat128}), r, n, x)
-              Float128(r[])
-          end
-          function SpecialFunctions.gamma(x::Float128)
-              r = Ref{Float128}()
-              ccall((:tgammaq, libquadmath),
-                    Cvoid, (Ptr{Cfloat128}, Ref{Cfloat128}), r, x)
-              Float128(r[])
-          end
-          function SpecialFunctions.lgamma(x::Float128)
-              r = Ref{Float128}()
-              ccall((:lgammaq, libquadmath),
-                    Cvoid, (Ptr{Cfloat128},Ref{Cfloat128}), r, x)
-              Float128(r[])
-          end
-      elseif Sys.iswindows()
-          # Calling sequences are mysterious in this case.
-          @warn "SpecialFunctions are not properly defined for Float128"
-      else
-        SpecialFunctions.erf(x::Float128) = Float128(ccall((:erfq, libquadmath), Cfloat128, (Cfloat128, ), x))
-        SpecialFunctions.erfc(x::Float128) = Float128(ccall((:erfcq, libquadmath), Cfloat128, (Cfloat128, ), x))
-
-        SpecialFunctions.besselj0(x::Float128) = Float128(ccall((:j0q, libquadmath), Cfloat128, (Cfloat128, ), x))
-        SpecialFunctions.besselj1(x::Float128) = Float128(ccall((:j1q, libquadmath), Cfloat128, (Cfloat128, ), x))
-        SpecialFunctions.bessely0(x::Float128) = Float128(ccall((:y0q, libquadmath), Cfloat128, (Cfloat128, ), x))
-        SpecialFunctions.bessely1(x::Float128) = Float128(ccall((:y1q, libquadmath), Cfloat128, (Cfloat128, ), x))
-        SpecialFunctions.besselj(n::Cint, x::Float128) = Float128(ccall((:jnq, libquadmath), Cfloat128, (Cint, Cfloat128), n, x))
-        SpecialFunctions.bessely(n::Cint, x::Float128) = Float128(ccall((:ynq, libquadmath), Cfloat128, (Cint, Cfloat128), n, x))
-
-        SpecialFunctions.gamma(x::Float128) = Float128(ccall((:tgammaq, libquadmath), Cfloat128, (Cfloat128, ), x))
-        SpecialFunctions.lgamma(x::Float128) = Float128(ccall((:lgammaq, libquadmath), Cfloat128, (Cfloat128, ), x))
-      end
+        include("specfun.jl")
     end
 end
-
 
 sign_mask(::Type{Float128}) =        0x8000_0000_0000_0000_0000_0000_0000_0000
 exponent_mask(::Type{Float128}) =    0x7fff_0000_0000_0000_0000_0000_0000_0000
@@ -502,7 +422,7 @@ end
 
 ## one argument
 for f in (:acos, :acosh, :asin, :asinh, :atan, :atanh, :cosh, :cos,
-          :erf, :erfc, :exp, :expm1, :log, :log2, :log10, :log1p,
+          :exp, :expm1, :log, :log2, :log10, :log1p,
           :sin, :sinh, :sqrt, :tan, :tanh,
           :ceil, :floor, :trunc, )
     if _WIN_PTR_ABI
