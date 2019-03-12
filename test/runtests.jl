@@ -101,6 +101,18 @@ end
     @test parse(Float128,"3.0") == Float128(3.0)
 end
 
+@testset "IEEE-754 compatibility" begin
+    Zero = Float128(0)
+    One = Float128(1)
+    huge = floatmax(Float128)
+    tiny = floatmin(Float128)
+    @test Zero^Zero === One
+    @test Zero^0 === One
+    @test isinf(huge + huge)
+    @test isnan(Zero / Zero)
+    @test isinf(One / Zero)
+end
+
 if !Sys.iswindows() || (Sys.WORD_SIZE == 64)
     include("specfun.jl")
 end
