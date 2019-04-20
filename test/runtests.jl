@@ -1,24 +1,27 @@
 using Test
 using Quadmath
 
-isnan128(x) = isa(x, Float128) && isnan(x)
-isinf128(x) = isa(x, Float128) && isinf(x)
+function puzzle()
+    isnan128(x) = isa(x, Float128) && isnan(x)
+    isinf128(x) = isa(x, Float128) && isinf(x)
 
-@testset "nonfinite" begin
-    Zero = Float128(0)
-    One = Float128(1)
-    huge = floatmax(Float128)
-    myinf = huge + huge
-    myminf = -myinf
-    @test isinf128(myinf)
-    @test isnan128(Zero / Zero)
-    @test isinf128(One / Zero)
-    @test isnan128(myinf - myinf)
-    @test isnan128(myinf + myminf)
-    @test Inf128 === myinf
-    @test typemax(Float128) === myinf
-    @test typemin(Float128) === myminf
+    @testset "nonfinite" begin
+        Zero = Float128(0)
+        One = Float128(1)
+        huge = floatmax(Float128)
+        myinf = huge + huge
+        myminf = -myinf
+        @test isinf128(myinf)
+        @test isnan128(Zero / Zero)
+        @test isinf128(One / Zero)
+        @test isnan128(myinf - myinf)
+        @test isnan128(myinf + myminf)
+        @test Inf128 === myinf
+        @test typemax(Float128) === myinf
+        @test typemin(Float128) === myminf
+    end
 end
+puzzle()
 
 @testset "fp decomp" begin
     y = Float128(2.0)
@@ -28,6 +31,7 @@ end
     z = ldexp(Float128(0.5), 2)
     @test z == y
 end
+puzzle()
 
 @testset "conversions" begin
 @testset "conversion $T" for T in (Float16, Float32, Float64, Int32, Int64, Int128, UInt32, UInt64, UInt128, BigFloat, BigInt)
@@ -48,6 +52,7 @@ end
         @test T(xf) == x
     end
 end
+puzzle()
 
 @testset "conversion $T exceptions" for T in (Int32, Int64, UInt32, UInt64)
     x = Float128(typemax(T))
@@ -55,6 +60,7 @@ end
     x = Float128(typemin(T))
     @test_throws InexactError T(x-Float128(1))
 end
+puzzle()
 
 @testset "conversion $T exceptions" for T in (Float32, Float64)
     x = Float128(typemax(T))
@@ -62,6 +68,7 @@ end
     x = Float128(typemin(T))
     @test isinf(T(x-Float128(1)))
 end
+puzzle()
 
 @testset "BigFloat" begin
     x = parse(Float128, "0.1")
@@ -69,6 +76,7 @@ end
     @test Float64(x+y) == Float64(BigFloat(x) + BigFloat(y))
     @test x+y == Float128(BigFloat(x) + BigFloat(y))
 end
+puzzle()
 
 @testset "BigInt" begin
     x = parse(Float128, "100.0")
@@ -76,9 +84,11 @@ end
     @test Float64(x+y) == Float64(BigInt(x) + BigInt(y))
     @test x+y == Float128(BigInt(x) + BigInt(y))    
 end
+puzzle()
 end
 
 @test Base.exponent_one(Float128) == reinterpret(UInt128, Float128(1.0))
+puzzle()
 
 @testset "flipsign" begin
     x = Float128( 2.0)
@@ -86,6 +96,7 @@ end
     @test x == flipsign(y, -one(Float128))
     @test y == flipsign(y,  1)
 end
+puzzle()
 
 @testset "arithmetic" begin
     fpi = Float128(pi)
@@ -94,6 +105,7 @@ end
     @test fpi * finvpi === one(Float128)
     @test finvpi / fpi == finvpi^2
 end
+puzzle()
 
 @testset "modf" begin
     x = Float128(pi)
@@ -110,6 +122,7 @@ end
     fpart, ipart = modf(x) .+ modf(y)
     @test x+y == ipart+fpart
 end
+puzzle()
 
 @testset "transcendental etc. calls" begin
     # at least enough to cover all the wrapping code
@@ -122,6 +135,7 @@ end
     @test atan(x,x) ≈ Float128(pi) / 4
     @test fma(x,x,Float128(-1.0)) ≈ Float128(1)
 end
+puzzle()
 
 @testset "misc. math" begin
     x = sqrt(Float128(2.0))
@@ -130,6 +144,7 @@ end
     @test m+one(Float128) == m
     @test m-one(Float128) != m
 end
+puzzle()
 
 function hist(X, n)
     v = zeros(Int, n)
@@ -150,6 +165,7 @@ using Random
         @test minimum(counts) > 300
     end
 end
+puzzle()
 
 @testset "string conversion" begin
     s = string(Float128(3.0))
@@ -158,25 +174,8 @@ end
     @test (m != nothing) && (m.match == s)
     @test parse(Float128,"3.0") == Float128(3.0)
 end
+puzzle()
 
-isnan128(x) = isa(x, Float128) && isnan(x)
-isinf128(x) = isa(x, Float128) && isinf(x)
-
-@testset "nonfinite" begin
-    Zero = Float128(0)
-    One = Float128(1)
-    huge = floatmax(Float128)
-    myinf = huge + huge
-    myminf = -myinf
-    @test isinf128(myinf)
-    @test isnan128(Zero / Zero)
-    @test isinf128(One / Zero)
-    @test isnan128(myinf - myinf)
-    @test isnan128(myinf + myminf)
-    @test Inf128 === myinf
-    @test typemax(Float128) === myinf
-    @test typemin(Float128) === myminf
-end
 
 include("specfun.jl")
 
