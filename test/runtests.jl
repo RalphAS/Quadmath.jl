@@ -1,5 +1,24 @@
-using Test, Random
+using Test
 using Quadmath
+
+isnan128(x) = isa(x, Float128) && isnan(x)
+isinf128(x) = isa(x, Float128) && isinf(x)
+
+@testset "nonfinite" begin
+    Zero = Float128(0)
+    One = Float128(1)
+    huge = floatmax(Float128)
+    myinf = huge + huge
+    myminf = -myinf
+    @test isinf128(myinf)
+    @test isnan128(Zero / Zero)
+    @test isinf128(One / Zero)
+    @test isnan128(myinf - myinf)
+    @test isnan128(myinf + myminf)
+    @test Inf128 === myinf
+    @test typemax(Float128) === myinf
+    @test typemin(Float128) === myminf
+end
 
 @testset "fp decomp" begin
     y = Float128(2.0)
@@ -120,6 +139,7 @@ function hist(X, n)
     v
 end
 
+using Random
 @testset "random" begin
     # test for sanity and coarse uniformity
     @test typeof(rand(Float128)) == Float128
