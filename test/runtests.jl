@@ -101,7 +101,12 @@ end
     @test abs(x) == x
     @test hypot(Float128(3),Float128(4)) == Float128(5)
     @test atan(x,x) ≈ Float128(pi) / 4
+    h = floatmax(Float128)
+    @test isinf(h+h)
+    @show h+h
     @test fma(x,x,Float128(-1.0)) ≈ Float128(1)
+    @show h+h
+    @test_broken isinf(h+h)
 end
 
 @testset "misc. math" begin
