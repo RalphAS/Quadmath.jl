@@ -23,6 +23,26 @@ function puzzle()
 end
 puzzle()
 
+function trial(T)
+    h,mh,half,two = floatmax(T),-floatmax(T),T(0.5),T(2)
+    he = eps(h)
+    @show h+h
+    @show h+he
+    @show mh-h
+    @show mh-he
+    @show h*h
+    @show h*two
+    @show h/half
+end
+
+trial(Float128)
+let y=Float128(2)
+    @show fma(y,y,y)
+end
+trial(Float128)
+trial(Float64)
+trial(Float128)
+
 @testset "fp decomp" begin
     y = Float128(2.0)
     x,n = frexp(y)
@@ -174,8 +194,6 @@ puzzle()
     @test (m != nothing) && (m.match == s)
     @test parse(Float128,"3.0") == Float128(3.0)
 end
-puzzle()
-
 
 include("specfun.jl")
 
