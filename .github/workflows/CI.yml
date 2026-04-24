@@ -7,8 +7,8 @@ on:
     tags: '*'
 jobs:
   test:
-    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
-    runs-on: ${{ matrix.os }}
+    name: Julia ${{ matrix.version }} - ${{ matrix.os.name }} - ${{ matrix.os.arch }} - ${{ github.event_name }}
+    runs-on: ${{ matrix.os.name }}
     strategy:
       fail-fast: false
       matrix:
@@ -17,17 +17,18 @@ jobs:
           - '1'
           - 'nightly'
         os:
-          - ubuntu-latest
-          - macOS-latest
-          - windows-latest
-        arch:
-          - x64
+          - name: ubuntu-latest
+            arch: x64
+          - name: macOS-latest
+            arch: aarch64
+          - name: windows-latest
+            arch: x64
     steps:
       - uses: actions/checkout@v6
       - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.version }}
-          arch: ${{ matrix.arch }}
+          arch: ${{ matrix.os.arch }}
       - uses: julia-actions/cache@v3
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
