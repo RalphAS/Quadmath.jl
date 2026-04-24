@@ -6,7 +6,7 @@ This is a Julia interface to libquadmath, providing a `Float128` type correspond
 
 ## Support
 
-Quadmath currently works on x86_64 Linux, macOS, and Windows.
+Quadmath currently works on x86_64 Linux and Windows, and aarch64 macOS.
 
 - It may require a new-ish version of gcc which supports `__float128` type.
 - It has not been tested on 32 bit Linux.
