@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - ras/ci-archfix
     tags: '*'
 jobs:
   test:
